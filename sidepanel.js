@@ -51,52 +51,87 @@ const elements = {
 // ─── Initialization ──────────────────────────────────────────────────────────
 async function init() {
   await restoreSettings();
-  updateVideoInfo();
   setupEventListeners();
   setupSpeedSync();
+  // Click video info bar to manually retry connection
+  document.querySelector(".video-info-bar")?.addEventListener("click", () => {
+    updateVideoInfo();
+  });
+  updateVideoInfo();
 }
 
 // ─── Tab & Content Script Communication ──────────────────────────────────────
-async function getCurrentTab() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tab;
+async function getYouTubeTab() {
+  // Try the currently focused tab first
+  const activeTabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  if (activeTabs[0]?.url?.includes("youtube.com/watch")) return activeTabs[0];
+
+  // Fallback: find any YouTube tab with a video
+  const allYT = await chrome.tabs.query({ url: "*://*.youtube.com/*" });
+  return allYT.find(t => t.url?.includes("watch")) || allYT[0] || null;
+}
+
+async function ensureContentScript(tabId) {
+  try {
+    await chrome.tabs.sendMessage(tabId, { action: "ping" });
+    return true;
+  } catch {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ["content.js"]
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }
 
 async function sendToContent(action, payload = {}) {
+  const tab = state.currentTabId ? { id: state.currentTabId } : await getYouTubeTab();
+  if (!tab) return { error: "No YouTube tab found" };
   try {
-    const tab = await getCurrentTab();
-    if (!tab) return { error: "No active tab" };
+    state.currentTabId = tab.id;
     return await chrome.tabs.sendMessage(tab.id, { action, ...payload });
   } catch (e) {
-    return { error: e.message };
+    return { error: "Content script not reachable. Try refreshing YouTube.", detail: e.message };
   }
 }
 
 async function updateVideoInfo() {
-  const tab = await getCurrentTab();
-  if (!tab || !tab.url?.includes("youtube.com/watch")) {
+  const tab = await getYouTubeTab();
+  if (!tab) {
     elements.videoTitle.textContent = "Open a YouTube video to begin";
     elements.pulseIndicator.className = "pulse-indicator red-pulse";
     return;
   }
 
   state.currentTabId = tab.id;
-  const res = await sendToContent("ping");
-  if (res && res.status === "ready") {
-    elements.pulseIndicator.className = "pulse-indicator green-pulse";
-    const playState = await sendToContent("getPlayState");
-    if (playState && !playState.error) {
-      state.title = playState.title || "YouTube Video";
-      state.videoId = playState.videoId || "";
-      elements.videoTitle.textContent = state.title;
-      elements.currentSpeed.textContent = parseFloat(playState.speed).toFixed(2) + "x";
-      elements.speedSlider.value = Math.min(parseFloat(playState.speed), 4);
-      // Auto-fetch transcript data
-      fetchTranscriptData();
-    }
-  } else {
-    elements.videoTitle.textContent = "Please refresh the YouTube tab";
+
+  // Ensure content script is injected
+  const loaded = await ensureContentScript(tab.id);
+  if (!loaded) {
+    elements.videoTitle.textContent = "Could not inject — refresh YouTube tab";
     elements.pulseIndicator.className = "pulse-indicator red-pulse";
+    return;
+  }
+
+  // Small delay to let content script initialize
+  await new Promise(r => setTimeout(r, 100));
+
+  elements.pulseIndicator.className = "pulse-indicator green-pulse";
+  const playState = await sendToContent("getPlayState");
+  if (playState && !playState.error) {
+    state.title = playState.title || "YouTube Video";
+    state.videoId = playState.videoId || "";
+    elements.videoTitle.textContent = state.title;
+    elements.currentSpeed.textContent = parseFloat(playState.speed).toFixed(2) + "x";
+    elements.speedSlider.value = Math.min(parseFloat(playState.speed), 4);
+    fetchTranscriptData();
+  } else {
+    elements.videoTitle.textContent = "YouTube video detected — loading...";
+    elements.pulseIndicator.className = "pulse-indicator green-pulse";
   }
 }
 
@@ -553,8 +588,8 @@ function markdownToHTML(md) {
 // ─── Periodic Refresh ────────────────────────────────────────────────────────
 // Re-check video info every 2 seconds (ultra-light interval)
 setInterval(async () => {
-  const tab = await getCurrentTab();
-  if (tab && tab.url?.includes("youtube.com/watch")) {
+  const tab = await getYouTubeTab();
+  if (tab) {
     if (tab.id !== state.currentTabId) {
       state.currentTabId = tab.id;
       await updateVideoInfo();
@@ -567,6 +602,7 @@ setInterval(async () => {
           state.title = res.title;
           elements.videoTitle.textContent = state.title;
         }
+        elements.pulseIndicator.className = "pulse-indicator green-pulse";
       }
     }
   } else {
