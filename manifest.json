@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube TurboScribe & AI Studio",
+  "version": "1.0.0",
+  "description": "Ultra-lightweight YouTube extension for custom playback speed, transcripts, AI summaries, chapters, interactive chat, and auto ad-skipping. Built by Aditya Priyadarshi.",
+  "author": "Aditya Priyadarshi",
+  "permissions": [
+    "storage",
+    "sidePanel",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://*.youtube.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Click to open YouTube TurboScribe & AI Studio"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.youtube.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_end"
+    }
+  ]
+}
