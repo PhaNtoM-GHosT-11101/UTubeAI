@@ -106,17 +106,6 @@ youtube-turboscribe/
 
 **Total bundle size: ~50 KB** — smaller than most images on the web.
 
----
-
-## Publishing (Free Options)
-
-| Platform | Cost | Notes |
-| :--- | :---: | :--- |
-| **Chrome Web Store** | $5 (one-time) | Requires developer registration fee |
-| **Microsoft Edge Add-ons** | **$0** | Fully compatible — Chromium-based |
-| **Firefox Add-ons (AMO)** | **$0** | Minor manifest tweaks needed |
-| **GitHub Releases** | **$0** | Direct `.zip` distribution |
-| **Developer Mode** | **$0** | Load unpacked — best for testing |
 
 ---
 
